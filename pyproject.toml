@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "url-to-calibre"
+version = "0.1.0"
+description = "Convert a URL's contents into ebook format and add to Calibre library"
+authors = ["Alex C-G"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10"
+newspaper3k = "^0.2.8"
+beautifulsoup4 = "^4.12.3"
+requests = "^2.32.3"
+ebooklib = "^0.18"
+lxml-html-clean = "^0.4.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
