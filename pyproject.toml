@@ -11,6 +11,7 @@ python = "^3.9"
 lxml-html-clean = "^0.4.1"
 beautifulsoup4 = "^4.13.1"
 ebooklib = "^0.18"
+newspaper3k = "^0.2.8"
 
 
 [build-system]
