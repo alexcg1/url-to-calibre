@@ -4,9 +4,21 @@ Python script to convert a URL's content to ebook format and send directly to [C
 
 ## Installation
 
-1. Clone the repo and enter the folder
-2. Run `poetry build`
-3. Run `poetry install`
+### Prerequisites
+
+You'll need [Calibre](https://github.com/kovidgoyal/calibre) and you'll need to know where your Calibre library is stored.
+
+Run:
+
+```shell
+pip install url-to-calibre
+```
+
+If you're on a system that doesn't let you install Python packages outside of a virtual environment, run:
+
+```shell
+pipx install url-to-calibre
+```
 
 ## Usage
 
@@ -21,3 +33,8 @@ You can specify other formats (`mobi` or `azw3`) via the `--format` (or `-f`) pa
 ```shell
 url-to-calibre <URL> -f mobi
 ```
+
+## Todo
+
+- Take multiple URLs as arguments.
+- Allow input via STDIN so user can pass a file full of URLs.
