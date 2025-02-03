@@ -2,17 +2,15 @@
 name = "url-to-calibre"
 version = "1.0.0"
 description = "Convert a URL's contents into ebook format and add to Calibre library"
-authors = ["Alex C-G"]
+authors = ["alexcg"]
 readme = "README.md"
 packages = [{ include = "url_to_calibre" }]
 
 [tool.poetry.dependencies]
-python = ">=3.12"
-newspaper3k = "^0.2.8"
-beautifulsoup4 = "^4.12.3"
-requests = "^2.32.3"
-ebooklib = "^0.18"
+python = "^3.9"
 lxml-html-clean = "^0.4.1"
+beautifulsoup4 = "^4.13.1"
+ebooklib = "^0.18"
 
 
 [build-system]
