@@ -12,6 +12,7 @@ lxml-html-clean = "^0.4.1"
 beautifulsoup4 = "^4.13.1"
 ebooklib = "^0.18"
 newspaper3k = "^0.2.8"
+rich = "^13.9.4"
 
 
 [build-system]

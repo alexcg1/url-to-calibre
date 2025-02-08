@@ -11,6 +11,13 @@ from shutil import which
 from bs4 import BeautifulSoup
 from ebooklib import epub
 from newspaper import Article
+from rich.console import Console
+from rich.logging import RichHandler
+import logging
+
+console = Console()
+logging.basicConfig(level=logging.INFO, handlers=[RichHandler(console=console)])
+logger = logging.getLogger("url-to-calibre")
 
 
 def sanitize_filename(title):
@@ -178,11 +185,11 @@ def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path):
         article.download()
         article.parse()
     except Exception as e:
-        print(f"Error downloading article: {e}", file=sys.stderr)
+        logger.warning(f"Warning: Failed to download article from {url}: {e}")
         return
 
     if not article.title or not article.text:
-        print("Error: Could not extract meaningful content from URL", file=sys.stderr)
+        logger.warning(f"Warning: Could not extract meaningful content from URL: {url}")
         return
 
     sanitized_title = sanitize_filename(article.title) or "untitled"
@@ -192,7 +199,7 @@ def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path):
 
         if format != "epub":
             if not ebook_convert_path:
-                print("Error: ebook-convert not found. Install Calibre first.", file=sys.stderr)
+                logger.warning("Warning: ebook-convert not found. Install Calibre first.")
                 return
 
             output_path = Path(tmpdir) / f"{sanitized_title}.{format}"
@@ -203,7 +210,7 @@ def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path):
                     env=get_system_path(),
                 )
             except subprocess.CalledProcessError as e:
-                print(f"Conversion failed: {e}", file=sys.stderr)
+                logger.warning(f"Warning: Conversion failed for {url}: {e}")
                 return
         else:
             output_path = epub_path
@@ -214,13 +221,14 @@ def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path):
                 check=True,
                 env=get_system_path(),
             )
-            print(f"Successfully added to Calibre: {article.title}")
+            logger.info(f"Successfully added to Calibre: {article.title}")
         except subprocess.CalledProcessError as e:
-            print(f"Error adding to Calibre: {e}", file=sys.stderr)
+            logger.warning(f"Warning: Error adding to Calibre for {url}: {e}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Convert web articles to ebooks")
+    parser.add_argument("url", nargs="*", help="URL(s) of the article(s) to convert")
     parser.add_argument(
         "-f",
         "--format",
@@ -235,18 +243,18 @@ def main():
     ebook_convert_path = check_dependency("ebook-convert")
 
     if not calibredb_path:
-        sys.exit(
+        logger.error(
             """Error: calibredb not found. Ensure Calibre is installed.
 Install command-line tools from Calibre preferences:
 1. Open Calibre
 2. Preferences → Advanced → Miscellaneous
 3. Click 'Install command line tools'"""
         )
+        sys.exit(1)
 
-    urls = [line.strip() for line in sys.stdin if line.strip()]
+    urls = args.url if args.url else [line.strip() for line in sys.stdin if line.strip()]
     for url in urls:
         process_url(url, args.format, calibre_lib, calibredb_path, ebook_convert_path)
-
 
 if __name__ == "__main__":
     main()
