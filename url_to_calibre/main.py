@@ -165,6 +165,46 @@ def create_epub(article, output_path):
     epub.write_epub(output_path, book, {})
 
 
+def create_epub_from_html(url, html, output_path):
+    book = epub.EpubBook()
+    book.set_identifier(url)
+    book.set_title(url)
+    book.set_language("en")
+
+    # Clean HTML content
+    cleaned_html = sanitize_html(html)
+
+    # Create chapter content
+    chapter = epub.EpubHtml(
+        title=url,
+        file_name="content.xhtml",
+        content=f"""
+        <html>
+            <head>
+                <title>{url}</title>
+            </head>
+            <body>
+                <h1>{url}</h1>
+                {cleaned_html}
+            </body>
+        </html>
+        """,
+    )
+    book.add_item(chapter)
+
+    # Add table of contents
+    book.toc = (epub.Link("content.xhtml", "Content", "content"),)
+
+    # Add navigation files
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+
+    # Define spine
+    book.spine = ["nav", chapter]
+
+    epub.write_epub(output_path, book, {})
+
+
 def get_system_path():
     env = os.environ.copy()
     if "VIRTUAL_ENV" in env:
@@ -240,7 +280,51 @@ def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path, re
 
     if not article.title or not article.text:
         logger.warning(f"Warning: Could not extract meaningful content from URL: {url}")
-        results["failed"].append(url)
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            html = response.text
+        except Exception as e:
+            logger.warning(f"Warning: Failed to download HTML from {url}: {e}")
+            results["failed"].append(url)
+            return
+
+        sanitized_title = sanitize_filename(url) or "untitled"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            epub_path = Path(tmpdir) / f"{sanitized_title}.epub"
+            create_epub_from_html(url, html, epub_path)
+
+            if format != "epub":
+                if not ebook_convert_path:
+                    logger.warning("Warning: ebook-convert not found. Install Calibre first.")
+                    results["failed"].append(url)
+                    return
+
+                output_path = Path(tmpdir) / f"{sanitized_title}.{format}"
+                try:
+                    subprocess.run(
+                        [ebook_convert_path, epub_path, output_path],
+                        check=True,
+                        env=get_system_path(),
+                    )
+                except subprocess.CalledProcessError as e:
+                    logger.warning(f"Warning: Conversion failed for {url}: {e}")
+                    results["failed"].append(url)
+                    return
+            else:
+                output_path = epub_path
+
+            try:
+                subprocess.run(
+                    [calibredb_path, "add", "--library-path", calibre_lib, output_path],
+                    check=True,
+                    env=get_system_path(),
+                )
+                logger.info(f"Successfully added to Calibre: {sanitized_title}")
+                results["success"].append(sanitized_title)
+            except subprocess.CalledProcessError as e:
+                logger.warning(f"Warning: Error adding to Calibre for {url}: {e}")
+                results["failed"].append(url)
         return
 
     sanitized_title = sanitize_filename(article.title) or "untitled"
