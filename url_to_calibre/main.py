@@ -172,9 +172,55 @@ def get_system_path():
     return env
 
 
+def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path):
+    article = Article(url, keep_article_html=True)
+    try:
+        article.download()
+        article.parse()
+    except Exception as e:
+        print(f"Error downloading article: {e}", file=sys.stderr)
+        return
+
+    if not article.title or not article.text:
+        print("Error: Could not extract meaningful content from URL", file=sys.stderr)
+        return
+
+    sanitized_title = sanitize_filename(article.title) or "untitled"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        epub_path = Path(tmpdir) / f"{sanitized_title}.epub"
+        create_epub(article, epub_path)
+
+        if format != "epub":
+            if not ebook_convert_path:
+                print("Error: ebook-convert not found. Install Calibre first.", file=sys.stderr)
+                return
+
+            output_path = Path(tmpdir) / f"{sanitized_title}.{format}"
+            try:
+                subprocess.run(
+                    [ebook_convert_path, epub_path, output_path],
+                    check=True,
+                    env=get_system_path(),
+                )
+            except subprocess.CalledProcessError as e:
+                print(f"Conversion failed: {e}", file=sys.stderr)
+                return
+        else:
+            output_path = epub_path
+
+        try:
+            subprocess.run(
+                [calibredb_path, "add", "--library-path", calibre_lib, output_path],
+                check=True,
+                env=get_system_path(),
+            )
+            print(f"Successfully added to Calibre: {article.title}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error adding to Calibre: {e}", file=sys.stderr)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Convert web articles to ebooks")
-    parser.add_argument("url", help="URL of the article to convert")
     parser.add_argument(
         "-f",
         "--format",
@@ -185,7 +231,6 @@ def main():
     args = parser.parse_args()
 
     calibre_lib = get_config()
-
     calibredb_path = check_dependency("calibredb")
     ebook_convert_path = check_dependency("ebook-convert")
 
@@ -198,46 +243,9 @@ Install command-line tools from Calibre preferences:
 3. Click 'Install command line tools'"""
         )
 
-    article = Article(args.url, keep_article_html=True)
-    try:
-        article.download()
-        article.parse()
-    except Exception as e:
-        sys.exit(f"Error downloading article: {e}")
-
-    if not article.title or not article.text:
-        sys.exit("Error: Could not extract meaningful content from URL")
-
-    sanitized_title = sanitize_filename(article.title) or "untitled"
-    with tempfile.TemporaryDirectory() as tmpdir:
-        epub_path = Path(tmpdir) / f"{sanitized_title}.epub"
-        create_epub(article, epub_path)
-
-        if args.format != "epub":
-            if not ebook_convert_path:
-                sys.exit("Error: ebook-convert not found. Install Calibre first.")
-
-            output_path = Path(tmpdir) / f"{sanitized_title}.{args.format}"
-            try:
-                subprocess.run(
-                    [ebook_convert_path, epub_path, output_path],
-                    check=True,
-                    env=get_system_path(),
-                )
-            except subprocess.CalledProcessError as e:
-                sys.exit(f"Conversion failed: {e}")
-        else:
-            output_path = epub_path
-
-        try:
-            subprocess.run(
-                [calibredb_path, "add", "--library-path", calibre_lib, output_path],
-                check=True,
-                env=get_system_path(),
-            )
-            print(f"Successfully added to Calibre: {article.title}")
-        except subprocess.CalledProcessError as e:
-            sys.exit(f"Error adding to Calibre: {e}")
+    urls = [line.strip() for line in sys.stdin if line.strip()]
+    for url in urls:
+        process_url(url, args.format, calibre_lib, calibredb_path, ebook_convert_path)
 
 
 if __name__ == "__main__":

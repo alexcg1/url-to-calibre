@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "url-to-calibre"
-version = "1.0.0"
+version = "1.1.0"
 description = "Convert a URL's contents into ebook format and add to Calibre library"
 authors = ["alexcg"]
 readme = "README.md"
