@@ -14,6 +14,7 @@ from newspaper import Article
 from rich.console import Console
 from rich.logging import RichHandler
 import logging
+import requests
 
 console = Console()
 logging.basicConfig(level=logging.INFO, handlers=[RichHandler(console=console)])
@@ -179,17 +180,67 @@ def get_system_path():
     return env
 
 
-def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path):
+def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path, results):
+    if url.lower().endswith(".pdf"):
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+        except Exception as e:
+            logger.warning(f"Warning: Failed to download PDF from {url}: {e}")
+            results["failed"].append(url)
+            return
+
+        sanitized_title = sanitize_filename(Path(url).stem) or "untitled"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pdf_path = Path(tmpdir) / f"{sanitized_title}.pdf"
+            with open(pdf_path, "wb") as f:
+                f.write(response.content)
+
+            if format != "pdf":
+                if not ebook_convert_path:
+                    logger.warning("Warning: ebook-convert not found. Install Calibre first.")
+                    results["failed"].append(url)
+                    return
+
+                output_path = Path(tmpdir) / f"{sanitized_title}.{format}"
+                try:
+                    subprocess.run(
+                        [ebook_convert_path, pdf_path, output_path],
+                        check=True,
+                        env=get_system_path(),
+                    )
+                except subprocess.CalledProcessError as e:
+                    logger.warning(f"Warning: Conversion failed for {url}: {e}")
+                    results["failed"].append(url)
+                    return
+            else:
+                output_path = pdf_path
+
+            try:
+                subprocess.run(
+                    [calibredb_path, "add", "--library-path", calibre_lib, output_path],
+                    check=True,
+                    env=get_system_path(),
+                )
+                logger.info(f"Successfully added to Calibre: {sanitized_title}")
+                results["success"].append(sanitized_title)
+            except subprocess.CalledProcessError as e:
+                logger.warning(f"Warning: Error adding to Calibre for {url}: {e}")
+                results["failed"].append(url)
+        return
+
     article = Article(url, keep_article_html=True)
     try:
         article.download()
         article.parse()
     except Exception as e:
         logger.warning(f"Warning: Failed to download article from {url}: {e}")
+        results["failed"].append(url)
         return
 
     if not article.title or not article.text:
         logger.warning(f"Warning: Could not extract meaningful content from URL: {url}")
+        results["failed"].append(url)
         return
 
     sanitized_title = sanitize_filename(article.title) or "untitled"
@@ -200,6 +251,7 @@ def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path):
         if format != "epub":
             if not ebook_convert_path:
                 logger.warning("Warning: ebook-convert not found. Install Calibre first.")
+                results["failed"].append(url)
                 return
 
             output_path = Path(tmpdir) / f"{sanitized_title}.{format}"
@@ -211,6 +263,7 @@ def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path):
                 )
             except subprocess.CalledProcessError as e:
                 logger.warning(f"Warning: Conversion failed for {url}: {e}")
+                results["failed"].append(url)
                 return
         else:
             output_path = epub_path
@@ -222,8 +275,10 @@ def process_url(url, format, calibre_lib, calibredb_path, ebook_convert_path):
                 env=get_system_path(),
             )
             logger.info(f"Successfully added to Calibre: {article.title}")
+            results["success"].append(article.title)
         except subprocess.CalledProcessError as e:
             logger.warning(f"Warning: Error adding to Calibre for {url}: {e}")
+            results["failed"].append(url)
 
 
 def main():
@@ -253,8 +308,12 @@ Install command-line tools from Calibre preferences:
         sys.exit(1)
 
     urls = args.url if args.url else [line.strip() for line in sys.stdin if line.strip()]
+    results = {"success": [], "failed": []}
     for url in urls:
-        process_url(url, args.format, calibre_lib, calibredb_path, ebook_convert_path)
+        process_url(url, args.format, calibre_lib, calibredb_path, ebook_convert_path, results)
+
+    console.print(f"\n[bold green]Books successfully added: {len(results['success'])}[/bold green]")
+    console.print(f"\n[bold red]Books failed to add: {len(results['failed'])}[/bold red]")
 
 if __name__ == "__main__":
     main()
